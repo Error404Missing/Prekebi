@@ -24,51 +24,69 @@ export function Navigation() {
     const supabase = createClient()
 
     const checkUserStatus = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      console.log("[v0] Current user:", user?.email)
-      setUser(user)
+      try {
+        // Check if Supabase is properly configured
+        if (!supabase.auth || typeof supabase.auth.getUser !== 'function') {
+          console.log("[v0] Supabase not configured, skipping auth check")
+          setUser(null)
+          setIsAdmin(false)
+          setHasApprovedTeam(false)
+          setRoomInfo(null)
+          return
+        }
 
-      if (user) {
-        const { data, error } = await supabase.from("profiles").select("is_admin, role").eq("id", user.id).single()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        console.log("[v0] Current user:", user?.email)
+        setUser(user)
 
-        console.log("[v0] User check result:", data, "Error:", error)
-        setIsAdmin(data?.is_admin || false)
+        if (user) {
+          const { data, error } = await supabase.from("profiles").select("is_admin, role").eq("id", user.id).single()
 
-        const { data: teamData } = await supabase
-          .from("teams")
-          .select("id, status")
-          .eq("leader_id", user.id)
-          .eq("status", "approved")
-          .single()
+          console.log("[v0] User check result:", data, "Error:", error)
+          setIsAdmin(data?.is_admin || false)
 
-        console.log("[v0] Team check result:", teamData)
-        const hasTeam = !!teamData
-        setHasApprovedTeam(hasTeam)
+          const { data: teamData } = await supabase
+            .from("teams")
+            .select("id, status")
+            .eq("leader_id", user.id)
+            .eq("status", "approved")
+            .single()
 
-        if (hasTeam) {
-          const { data: settingsData } = await supabase
-            .from("site_settings")
-            .select("key, value")
-            .in("key", ["room_id", "room_password", "start_time", "map"])
+          console.log("[v0] Team check result:", teamData)
+          const hasTeam = !!teamData
+          setHasApprovedTeam(hasTeam)
 
-          if (settingsData) {
-            const roomData = {
-              room_id: settingsData.find((s) => s.key === "room_id")?.value || "",
-              room_password: settingsData.find((s) => s.key === "room_password")?.value || "",
-              start_time: settingsData.find((s) => s.key === "start_time")?.value || "",
-              map: settingsData.find((s) => s.key === "map")?.value || "",
+          if (hasTeam) {
+            const { data: settingsData } = await supabase
+              .from("site_settings")
+              .select("key, value")
+              .in("key", ["room_id", "room_password", "start_time", "map"])
+
+            if (settingsData) {
+              const roomData = {
+                room_id: settingsData.find((s) => s.key === "room_id")?.value || "",
+                room_password: settingsData.find((s) => s.key === "room_password")?.value || "",
+                start_time: settingsData.find((s) => s.key === "start_time")?.value || "",
+                map: settingsData.find((s) => s.key === "map")?.value || "",
+              }
+
+              if (roomData.room_id || roomData.room_password || roomData.start_time || roomData.map) {
+                setRoomInfo(roomData)
+              }
             }
-
-            if (roomData.room_id || roomData.room_password || roomData.start_time || roomData.map) {
-              setRoomInfo(roomData)
-            }
+          } else {
+            setRoomInfo(null)
           }
         } else {
+          setIsAdmin(false)
+          setHasApprovedTeam(false)
           setRoomInfo(null)
         }
-      } else {
+      } catch (error) {
+        console.error("[v0] Error checking user status:", error)
+        setUser(null)
         setIsAdmin(false)
         setHasApprovedTeam(false)
         setRoomInfo(null)
@@ -77,21 +95,26 @@ export function Navigation() {
 
     checkUserStatus()
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("[v0] Auth state changed:", session?.user?.email)
-      setUser(session?.user || null)
-      if (session?.user) {
-        checkUserStatus()
-      } else {
-        setIsAdmin(false)
-        setHasApprovedTeam(false)
-        setRoomInfo(null)
-      }
-    })
+    try {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        console.log("[v0] Auth state changed:", session?.user?.email)
+        setUser(session?.user || null)
+        if (session?.user) {
+          checkUserStatus()
+        } else {
+          setIsAdmin(false)
+          setHasApprovedTeam(false)
+          setRoomInfo(null)
+        }
+      })
 
-    return () => subscription.unsubscribe()
+      return () => subscription?.unsubscribe()
+    } catch (error) {
+      console.error("[v0] Error setting up auth listener:", error)
+      return undefined
+    }
   }, [])
 
   useEffect(() => {
