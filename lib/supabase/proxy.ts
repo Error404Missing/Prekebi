@@ -6,10 +6,17 @@ export async function updateSession(request: NextRequest) {
     request,
   })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // If Supabase credentials are not configured, just allow the request through
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("[v0] Supabase not configured - skipping auth middleware")
+    return supabaseResponse
+  }
+
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -22,17 +29,20 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
         },
       },
-    },
-  )
+    })
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user && (request.nextUrl.pathname.startsWith("/profile") || request.nextUrl.pathname.startsWith("/admin"))) {
-    const url = request.nextUrl.clone()
-    url.pathname = "/auth/login"
-    return NextResponse.redirect(url)
+    if (!user && (request.nextUrl.pathname.startsWith("/profile") || request.nextUrl.pathname.startsWith("/admin"))) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/auth/login"
+      return NextResponse.redirect(url)
+    }
+  } catch (error) {
+    console.error("[v0] Error in auth middleware:", error)
+    // Continue without auth protection if there's an error
   }
 
   return supabaseResponse
