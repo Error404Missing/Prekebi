@@ -14,6 +14,10 @@ export default function HomePage() {
   useEffect(() => {
     async function fetchDiscordLink() {
       try {
+        if (!supabase.from) {
+          console.log("[v0] Supabase not configured, using default discord link")
+          return
+        }
         const { data, error } = await supabase.from("site_settings").select("value").eq("key", "discord_invite_link").single()
         if (!error && data) {
           setDiscordLink(data.value)

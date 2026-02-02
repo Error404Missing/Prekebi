@@ -1,4 +1,4 @@
-import { createBrowserClient } from "@supabase/ssr"
+import { createBrowserClient as createSupabaseBrowserClient } from "@supabase/ssr"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 let client: SupabaseClient | null = null
@@ -10,10 +10,12 @@ function getClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Missing Supabase environment variables")
+    console.warn("[v0] Supabase environment variables not configured. Database features will not work.")
+    // Return a dummy client to prevent initialization errors
+    return {} as SupabaseClient
   }
   
-  client = createBrowserClient(supabaseUrl, supabaseAnonKey)
+  client = createSupabaseBrowserClient(supabaseUrl, supabaseAnonKey)
   return client
 }
 
