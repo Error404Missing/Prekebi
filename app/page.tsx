@@ -9,11 +9,11 @@ import { createBrowserClient } from "@/lib/supabase/client"
 
 export default function HomePage() {
   const [discordLink, setDiscordLink] = useState("https://discord.gg/your-invite-link")
-  const supabase = createBrowserClient()
 
   useEffect(() => {
     async function fetchDiscordLink() {
       try {
+        const supabase = createBrowserClient()
         if (!supabase.from) {
           console.log("[v0] Supabase not configured, using default discord link")
           return

@@ -19,7 +19,6 @@ export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Setting[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const supabase = createBrowserClient()
 
   useEffect(() => {
     fetchSettings()
@@ -27,6 +26,12 @@ export default function AdminSettingsPage() {
 
   async function fetchSettings() {
     try {
+      const supabase = createBrowserClient()
+      if (!supabase.from) {
+        console.log("[v0] Supabase not configured")
+        setLoading(false)
+        return
+      }
       const { data, error } = await supabase.from("site_settings").select("*").order("key")
 
       if (error) throw error
@@ -41,6 +46,13 @@ export default function AdminSettingsPage() {
   async function handleSave() {
     setSaving(true)
     try {
+      const supabase = createBrowserClient()
+      if (!supabase.from) {
+        console.log("[v0] Supabase not configured")
+        alert("Supabase არ არის კონფიგურირებული")
+        setSaving(false)
+        return
+      }
       for (const setting of settings) {
         const { error } = await supabase.from("site_settings").update({ value: setting.value }).eq("id", setting.id)
 

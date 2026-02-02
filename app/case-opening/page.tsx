@@ -78,10 +78,15 @@ export default function CaseOpeningPage() {
   const [vipStatus, setVipStatus] = useState<{ vip_until: string } | null>(null)
   const [countdown, setCountdown] = useState("")
 
-  const supabase = createBrowserClient()
-
   const checkCanOpen = useCallback(async (userId: string) => {
     try {
+      const supabase = createBrowserClient()
+      if (!supabase.from) {
+        console.log("[v0] Supabase not configured")
+        setCanOpen(true)
+        setNextOpenTime(null)
+        return
+      }
       const { data: lastOpen, error } = await supabase
         .from("case_openings")
         .select("opened_at")
@@ -119,52 +124,83 @@ export default function CaseOpeningPage() {
       setCanOpen(true)
       setNextOpenTime(null)
     }
-  }, [supabase])
+  }, [])
 
   const fetchVipStatus = useCallback(async (userId: string) => {
-    const { data } = await supabase.from("user_vip_status").select("vip_until").eq("user_id", userId).single()
+    try {
+      const supabase = createBrowserClient()
+      if (!supabase.from) {
+        console.log("[v0] Supabase not configured")
+        setVipStatus(null)
+        return
+      }
+      const { data } = await supabase.from("user_vip_status").select("vip_until").eq("user_id", userId).single()
 
-    if (data && new Date(data.vip_until) > new Date()) {
-      setVipStatus(data)
-    } else {
+      if (data && new Date(data.vip_until) > new Date()) {
+        setVipStatus(data)
+      } else {
+        setVipStatus(null)
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching VIP status:", error)
       setVipStatus(null)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     async function checkUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUser(user)
+      try {
+        const supabase = createBrowserClient()
+        if (!supabase.auth || typeof supabase.auth.getUser !== 'function') {
+          console.log("[v0] Supabase not configured")
+          setLoading(false)
+          return
+        }
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        setUser(user)
 
-      if (user) {
-        console.log("[v0] Checking case opening status for user:", user.id)
-        await checkCanOpen(user.id)
-        await fetchVipStatus(user.id)
+        if (user) {
+          console.log("[v0] Checking case opening status for user:", user.id)
+          await checkCanOpen(user.id)
+          await fetchVipStatus(user.id)
+        }
+
+        setLoading(false)
+      } catch (error) {
+        console.error("[v0] Error checking user:", error)
+        setLoading(false)
       }
-
-      setLoading(false)
     }
 
     // Check immediately on mount
     checkUser()
 
     // Also set up a listener for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        console.log("[v0] Auth state changed, rechecking case status")
-        await checkCanOpen(session.user.id)
-        await fetchVipStatus(session.user.id)
+    try {
+      const supabase = createBrowserClient()
+      if (!supabase.auth || typeof supabase.auth.onAuthStateChange !== 'function') {
+        return
       }
-    })
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (session?.user) {
+          console.log("[v0] Auth state changed, rechecking case status")
+          await checkCanOpen(session.user.id)
+          await fetchVipStatus(session.user.id)
+        }
+      })
 
-    return () => {
-      subscription?.unsubscribe()
+      return () => {
+        subscription?.unsubscribe()
+      }
+    } catch (error) {
+      console.error("[v0] Error setting up auth listener:", error)
+      return undefined
     }
-  }, [supabase, checkCanOpen, fetchVipStatus])
+  }, [checkCanOpen, fetchVipStatus])
 
   useEffect(() => {
     if (!nextOpenTime) return
@@ -211,6 +247,11 @@ export default function CaseOpeningPage() {
     // Always check if user can actually open a case (verify against database)
     console.log("[v0] Verifying case opening eligibility before opening")
     try {
+      const supabase = createBrowserClient()
+      if (!supabase.from) {
+        console.log("[v0] Supabase not configured")
+        return
+      }
       const { data: lastOpen, error } = await supabase
         .from("case_openings")
         .select("opened_at")
@@ -290,42 +331,52 @@ export default function CaseOpeningPage() {
   const saveReward = async (reward: Reward) => {
     if (!user) return
 
-    // Insert case opening record
-    await supabase.from("case_openings").insert({
-      user_id: user.id,
-      reward: reward.id,
-    })
-
-    // If won VIP, update or insert VIP status
-    if (reward.days > 0) {
-      const { data: existingVip } = await supabase
-        .from("user_vip_status")
-        .select("vip_until")
-        .eq("user_id", user.id)
-        .single()
-
-      let newVipUntil: Date
-
-      if (existingVip && new Date(existingVip.vip_until) > new Date()) {
-        // Extend existing VIP
-        newVipUntil = new Date(new Date(existingVip.vip_until).getTime() + reward.days * 24 * 60 * 60 * 1000)
-      } else {
-        // New VIP
-        newVipUntil = new Date(Date.now() + reward.days * 24 * 60 * 60 * 1000)
+    try {
+      const supabase = createBrowserClient()
+      if (!supabase.from) {
+        console.log("[v0] Supabase not configured")
+        return
       }
 
-      await supabase.from("user_vip_status").upsert({
+      // Insert case opening record
+      await supabase.from("case_openings").insert({
         user_id: user.id,
-        vip_until: newVipUntil.toISOString(),
-        updated_at: new Date().toISOString(),
+        reward: reward.id,
       })
 
-      setVipStatus({ vip_until: newVipUntil.toISOString() })
-    }
+      // If won VIP, update or insert VIP status
+      if (reward.days > 0) {
+        const { data: existingVip } = await supabase
+          .from("user_vip_status")
+          .select("vip_until")
+          .eq("user_id", user.id)
+          .single()
 
-    // Update can open status
-    setCanOpen(false)
-    setNextOpenTime(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000))
+        let newVipUntil: Date
+
+        if (existingVip && new Date(existingVip.vip_until) > new Date()) {
+          // Extend existing VIP
+          newVipUntil = new Date(new Date(existingVip.vip_until).getTime() + reward.days * 24 * 60 * 60 * 1000)
+        } else {
+          // New VIP
+          newVipUntil = new Date(Date.now() + reward.days * 24 * 60 * 60 * 1000)
+        }
+
+        await supabase.from("user_vip_status").upsert({
+          user_id: user.id,
+          vip_until: newVipUntil.toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+
+        setVipStatus({ vip_until: newVipUntil.toISOString() })
+      }
+
+      // Update can open status
+      setCanOpen(false)
+      setNextOpenTime(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000))
+    } catch (error) {
+      console.error("[v0] Error saving reward:", error)
+    }
   }
 
   if (loading) {

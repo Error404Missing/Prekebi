@@ -13,26 +13,34 @@ export default function ContactPage() {
     email: "contact@pubgscrims.ge",
     discordUsername: "admin#1234",
   })
-  const supabase = createBrowserClient()
 
   useEffect(() => {
     async function fetchSettings() {
-      const { data } = await supabase
-        .from("site_settings")
-        .select("key, value")
-        .in("key", ["discord_invite_link", "contact_email", "contact_discord"])
+      try {
+        const supabase = createBrowserClient()
+        if (!supabase.from) {
+          console.log("[v0] Supabase not configured")
+          return
+        }
+        const { data } = await supabase
+          .from("site_settings")
+          .select("key, value")
+          .in("key", ["discord_invite_link", "contact_email", "contact_discord"])
 
-      if (data) {
-        const settingsMap = data.reduce(
-          (acc, item) => {
-            if (item.key === "discord_invite_link") acc.discordLink = item.value
-            if (item.key === "contact_email") acc.email = item.value
-            if (item.key === "contact_discord") acc.discordUsername = item.value
-            return acc
-          },
-          { discordLink: "", email: "", discordUsername: "" },
-        )
-        setSettings(settingsMap)
+        if (data) {
+          const settingsMap = data.reduce(
+            (acc, item) => {
+              if (item.key === "discord_invite_link") acc.discordLink = item.value
+              if (item.key === "contact_email") acc.email = item.value
+              if (item.key === "contact_discord") acc.discordUsername = item.value
+              return acc
+            },
+            { discordLink: "", email: "", discordUsername: "" },
+          )
+          setSettings(settingsMap)
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching settings:", error)
       }
     }
     fetchSettings()
